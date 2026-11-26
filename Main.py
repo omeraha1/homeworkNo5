@@ -28,7 +28,11 @@ class HeatTransfer(QWidget):
 
         self.bodyNo1 = None
         self.bodyNo2 = None
-        self.dt = 0.1 
+        self.dt = 0.1
+        self.cnt_t = 0.0
+        self.time_history = []
+        self.body1_temp_history = []
+        self.body2_temp_history = []
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.timer_method)
@@ -82,6 +86,22 @@ class HeatTransfer(QWidget):
             self.timer.stop()
             self.start_btn.setText("Start")
 
+    def start_stop_button_method(self):
+        if self.start_btn.isChecked():
+            self.bodyNo1 = Body(self.mass1.value(), self.hcap1.value(), self.temp1.value())
+            self.bodyNo2 = Body(self.mass2.value(), self.hcap2.value(), self.temp2.value())
+
+            self.cnt_t = 0.0
+            self.time_history = [0.0]
+            self.body1_temp_history = [self.bodyNo1.temperature]
+            self.body2_temp_history = [self.bodyNo2.temperature]
+
+            self.start_btn.setText("Stop")
+            self.timer.start(100)
+        else:
+            self.timer.stop()
+            self.start_btn.setText("Start")
+
     def timer_method(self):
         cond = self.cond.value()
         t1 = self.bodyNo1.temperature
@@ -102,6 +122,10 @@ class HeatTransfer(QWidget):
         self.temp2.setValue(new_t2)
         self.update_color(self.body1, new_t1)
         self.update_color(self.body2, new_t2)
+        self.cnt_t += self.dt
+        self.time_history.append(self.cnt_t)
+        self.body1_temp_history.append(new_t1)
+        self.body2_temp_history.append(new_t2)
 
     def setupUI(self):
         self.setWindowTitle("Heat Transfer")
