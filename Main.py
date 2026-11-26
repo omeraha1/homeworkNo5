@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt , QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QDoubleSpinBox,
@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
     QAbstractSpinBox,
 )
-
+from Body import Body
 from AboutWindow import AboutWindow
 from GraphWindow import GraphWindow
 
@@ -25,9 +25,25 @@ class HeatTransfer(QWidget):
         super().__init__()
         self.graph_window = GraphWindow(self)
         self.about_window = AboutWindow()
+
+        self.bodyNo1 = None
+        self.bodyNo2 = None
+        self.dt = 0.1 
+
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.timer_method)
+
         self.setupUI()
+
+
+        self.slider1.valueChanged.connect(self.left_temperature_changed)
+        self.slider2.valueChanged.connect(self.right_temperature_changed)
+        self.start_btn.clicked.connect(self.start_stop_button_method)
         self.graph_btn.clicked.connect(self.show_graph)
         self.about_btn.clicked.connect(self.show_about)
+
+        self.left_temperature_changed()
+        self.right_temperature_changed()
 
     def show_graph(self):
         self.graph_window.show()
@@ -39,6 +55,53 @@ class HeatTransfer(QWidget):
         self.graph_window.close()
         self.about_window.close()
         event.accept()
+
+    def update_color(self, body_widget, temp):
+        red = int(temp * 255 / 200)
+        green = int(150 - temp * 80 / 200)
+        blue = int(255 - temp * 215 / 200)
+        body_widget.setStyleSheet(f"background-color: rgb({red}, {green}, {blue}); border-radius: 12px;")
+
+    def left_temperature_changed(self):
+        t = self.slider1.value()
+        self.temp1.setValue(t)
+        self.update_color(self.body1, t)
+
+    def right_temperature_changed(self):
+        t = self.slider2.value()
+        self.temp2.setValue(t)
+        self.update_color(self.body2, t)
+
+    def start_stop_button_method(self):
+        if self.start_btn.isChecked():
+            self.bodyNo1 = Body(self.mass1.value(), self.hcap1.value(), self.temp1.value())
+            self.bodyNo2 = Body(self.mass2.value(), self.hcap2.value(), self.temp2.value())
+            self.start_btn.setText("Stop")
+            self.timer.start(100)
+        else:
+            self.timer.stop()
+            self.start_btn.setText("Start")
+
+    def timer_method(self):
+        cond = self.cond.value()
+        t1 = self.bodyNo1.temperature
+        t2 = self.bodyNo2.temperature
+
+        i1 = cond * (t2 - t1)
+        i2 = cond * (t1 - t2)
+
+        q1 = i1 * self.dt
+        q2 = i2 * self.dt
+
+        new_t1 = self.bodyNo1.add_heat(q1)
+        new_t2 = self.bodyNo2.add_heat(q2)
+
+        self.slider1.setValue(int(new_t1))
+        self.slider2.setValue(int(new_t2))
+        self.temp1.setValue(new_t1)
+        self.temp2.setValue(new_t2)
+        self.update_color(self.body1, new_t1)
+        self.update_color(self.body2, new_t2)
 
     def setupUI(self):
         self.setWindowTitle("Heat Transfer")
