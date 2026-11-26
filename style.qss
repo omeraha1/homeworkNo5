@@ -5,6 +5,14 @@ QWidget {
     font-size: 14px;
 }
 
+QWidget#heat_window {
+    background: qlineargradient(
+        x1: 0, y1: 0, x2: 1, y2: 1,
+        stop: 0 #fbfdff,
+        stop: 1 #e3eaf3
+    );
+}
+
 QLabel {
     background: transparent;
 }
@@ -54,6 +62,27 @@ QDoubleSpinBox[readOnly="true"] QLineEdit {
     padding: 6px 12px;
 }
 
+QComboBox {
+    background-color: #ffffff;
+    border: 1px solid #d1d5db;
+    border-radius: 7px;
+    padding: 7px 9px;
+}
+
+QComboBox:hover {
+    border-color: #9ca3af;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #ffffff;
+    border: 1px solid #d1d5db;
+    selection-background-color: #dbeafe;
+}
+
+QCheckBox {
+    spacing: 7px;
+}
+
 QSlider::groove:vertical {
     background-color: #d1d5db;
     width: 6px;
@@ -94,6 +123,11 @@ QPushButton#start_btn {
 }
 
 QPushButton#start_btn:checked {
-    background-color: #dcfce7;
-    border-color: #86c99b;
+    background-color: #ea580c;
+    border-color: #c2410c;
+    color: #ffffff;
+}
+
+QPushButton#start_btn:checked:hover {
+    background-color: #c2410c;
 }

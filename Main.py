@@ -4,6 +4,8 @@ from pathlib import Path
 from PySide6.QtCore import Qt , QTimer
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
+    QComboBox,
     QDoubleSpinBox,
     QFrame,
     QGridLayout,
@@ -39,7 +41,8 @@ class HeatTransfer(QWidget):
 
         self.setupUI()
 
-
+        self.mat1.currentTextChanged.connect(self.material1_changed)
+        self.mat2.currentTextChanged.connect(self.material2_changed)
         self.slider1.valueChanged.connect(self.left_temperature_changed)
         self.slider2.valueChanged.connect(self.right_temperature_changed)
         self.start_btn.clicked.connect(self.start_stop_button_method)
@@ -60,21 +63,44 @@ class HeatTransfer(QWidget):
         self.about_window.close()
         event.accept()
 
-    def update_color(self, body_widget, temp):
+    def get_rgb(self, temp):
+        if temp > 200:
+            temp = 200
+        if temp < 0:
+            temp = 0
         red = int(temp * 255 / 200)
         green = int(150 - temp * 80 / 200)
         blue = int(255 - temp * 215 / 200)
-        body_widget.setStyleSheet(f"background-color: rgb({red}, {green}, {blue}); border-radius: 12px;")
+        return red, green, blue
+
+    def update_color(self, body_widget, temp):
+        r, g, b = self.get_rgb(temp)
+        body_widget.setStyleSheet(
+            f"background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
+            f"stop:0 rgb({r}, {g}, {b}), stop:1 rgb({max(0, r-35)}, {max(0, g-35)}, {max(0, b-35)})); "
+            f"border-radius: 12px;"
+        )
+
+    def update_bridge(self):
+        r1, g1, b1 = self.get_rgb(self.temp1.value())
+        r2, g2, b2 = self.get_rgb(self.temp2.value())
+        self.connector.setStyleSheet(
+            f"background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, "
+            f"stop:0 rgb({r1}, {g1}, {b1}), stop:1 rgb({r2}, {g2}, {b2})); "
+            f"border-radius: 6px;"
+        )
 
     def left_temperature_changed(self):
         t = self.slider1.value()
         self.temp1.setValue(t)
         self.update_color(self.body1, t)
+        self.update_bridge()
 
     def right_temperature_changed(self):
         t = self.slider2.value()
         self.temp2.setValue(t)
         self.update_color(self.body2, t)
+        self.update_bridge()
 
     def start_stop_button_method(self):
         if self.start_btn.isChecked():
@@ -110,11 +136,18 @@ class HeatTransfer(QWidget):
         i1 = cond * (t2 - t1)
         i2 = cond * (t1 - t2)
 
-        q1 = i1 * self.dt
-        q2 = i2 * self.dt
+        q1 = (i1 + self.watt1.value()) * self.dt
+        q2 = (i2 + self.watt2.value()) * self.dt
 
         new_t1 = self.bodyNo1.add_heat(q1)
         new_t2 = self.bodyNo2.add_heat(q2)
+
+        if new_t1 < 0:
+            new_t1 = 0
+            self.bodyNo1.temperature = 0
+        if new_t2 < 0:
+            new_t2 = 0
+            self.bodyNo2.temperature = 0
 
         self.slider1.setValue(int(new_t1))
         self.slider2.setValue(int(new_t2))
@@ -122,13 +155,34 @@ class HeatTransfer(QWidget):
         self.temp2.setValue(new_t2)
         self.update_color(self.body1, new_t1)
         self.update_color(self.body2, new_t2)
+        self.update_bridge()
+
         self.cnt_t += self.dt
         self.time_history.append(self.cnt_t)
         self.body1_temp_history.append(new_t1)
         self.body2_temp_history.append(new_t2)
 
+        if self.auto_stop_cb.isChecked() and abs(new_t1 - new_t2) < 0.1:
+            self.timer.stop()
+            self.start_btn.setChecked(False)
+            self.start_btn.setText("Start")
+
+    def material1_changed(self):
+        materials = {"Copper": 0.39, "Aluminum": 0.90, "Iron": 0.45, "Water": 4.18}
+        name = self.mat1.currentText()
+        if name in materials:
+            self.hcap1.setValue(materials[name])
+
+    def material2_changed(self):
+        materials = {"Copper": 0.39, "Aluminum": 0.90, "Iron": 0.45, "Water": 4.18}
+        name = self.mat2.currentText()
+        if name in materials:
+            self.hcap2.setValue(materials[name])
+
+
     def setupUI(self):
         self.setWindowTitle("Heat Transfer")
+        self.setObjectName("heat_window")
         self.resize(900, 600)
         self.setMinimumSize(760, 500)
 
@@ -168,16 +222,16 @@ class HeatTransfer(QWidget):
         self.cond.setRange(0.01, 100.0)
         self.cond.setValue(1.00)
 
-        connector = QFrame()
-        connector.setObjectName("connector")
-        connector.setFixedHeight(28)
+        self.connector = QFrame()
+        self.connector.setObjectName("connector")
+        self.connector.setFixedHeight(28)
 
         middle_layout = QVBoxLayout()
         middle_layout.setContentsMargins(0, 0, 0, 0)
         middle_layout.addWidget(cond_label)
         middle_layout.addWidget(self.cond)
         middle_layout.addStretch()
-        middle_layout.addWidget(connector)
+        middle_layout.addWidget(self.connector)
         middle_layout.addStretch()
 
         self.body2 = QFrame()
@@ -219,6 +273,15 @@ class HeatTransfer(QWidget):
         self.temp1.setRange(0, 200)
         self.temp1.setValue(200.0)
 
+        self.mat1 = QComboBox()
+        self.mat1.addItems(["Custom", "Copper", "Aluminum", "Iron", "Water"])
+
+        self.watt1 = QDoubleSpinBox()
+        self.watt1.setRange(-500.0, 500.0)
+        self.watt1.setDecimals(0)
+        self.watt1.setValue(0)
+        self.watt1.setSuffix(" W")
+
         self.mass1 = QDoubleSpinBox()
         self.mass1.setSuffix(" kg")
         self.mass1.setDecimals(2)
@@ -231,11 +294,17 @@ class HeatTransfer(QWidget):
         self.hcap1.setRange(0.01, 100)
         self.hcap1.setValue(0.40)
 
-        for row, (label, spinbox) in enumerate(
-            (("Temp.", self.temp1), ("Mass", self.mass1), ("H. Cap.", self.hcap1))
+        for row, (label, control) in enumerate(
+            (
+                ("Material", self.mat1),
+                ("Heater", self.watt1),
+                ("Temp.", self.temp1),
+                ("Mass", self.mass1),
+                ("H. Cap.", self.hcap1),
+            )
         ):
             left_fields.addWidget(QLabel(label), row, 0)
-            left_fields.addWidget(spinbox, row, 1)
+            left_fields.addWidget(control, row, 1)
         left_fields.setColumnStretch(0, 1)
         left_fields.setColumnStretch(1, 3)
 
@@ -249,6 +318,9 @@ class HeatTransfer(QWidget):
         buttons_layout.addWidget(self.graph_btn)
         buttons_layout.addSpacing(8)
         buttons_layout.addWidget(self.about_btn)
+        self.auto_stop_cb = QCheckBox("Auto-stop")
+        self.auto_stop_cb.setChecked(True)
+        buttons_layout.addWidget(self.auto_stop_cb)
         buttons_layout.addStretch()
 
         self.temp2 = QDoubleSpinBox()
@@ -259,6 +331,15 @@ class HeatTransfer(QWidget):
         self.temp2.setDecimals(1)
         self.temp2.setRange(0, 200)
         self.temp2.setValue(0.0)
+
+        self.mat2 = QComboBox()
+        self.mat2.addItems(["Custom", "Copper", "Aluminum", "Iron", "Water"])
+
+        self.watt2 = QDoubleSpinBox()
+        self.watt2.setRange(-500.0, 500.0)
+        self.watt2.setDecimals(0)
+        self.watt2.setValue(0)
+        self.watt2.setSuffix(" W")
 
         self.mass2 = QDoubleSpinBox()
         self.mass2.setSuffix(" kg")
@@ -272,10 +353,16 @@ class HeatTransfer(QWidget):
         self.hcap2.setRange(0.01, 100)
         self.hcap2.setValue(0.40)
 
-        for row, (spinbox, label) in enumerate(
-            ((self.temp2, "Temp."), (self.mass2, "Mass"), (self.hcap2, "H. Cap."))
+        for row, (control, label) in enumerate(
+            (
+                (self.mat2, "Material"),
+                (self.watt2, "Heater"),
+                (self.temp2, "Temp."),
+                (self.mass2, "Mass"),
+                (self.hcap2, "H. Cap."),
+            )
         ):
-            right_fields.addWidget(spinbox, row, 0)
+            right_fields.addWidget(control, row, 0)
             right_fields.addWidget(QLabel(label), row, 1)
         right_fields.setColumnStretch(0, 3)
         right_fields.setColumnStretch(1, 1)
